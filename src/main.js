@@ -2,13 +2,11 @@ import * as THREE from "../node_modules/three/build/three.module.js";
 import "./styles.css";
 
 const app = document.querySelector("#app");
-const cameraToggle = document.querySelector("#cameraToggle");
 const rainToggle = document.querySelector("#rainToggle");
 const soundToggle = document.querySelector("#soundToggle");
 const scoreValue = document.querySelector("#scoreValue");
 const scoreMarkers = document.querySelector("#scoreMarkers");
 const successBanner = document.querySelector("#successBanner");
-const gestureVideo = document.querySelector("#gestureVideo");
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x071314, 0.046);
@@ -43,8 +41,8 @@ const palette = {
   amber: new THREE.Color("#e75f20")
 };
 
-let rainHeavy = true;
-let cameraGestureActive = false;
+let rainLevel = 1;
+let audioWanted = true;
 let lastPointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, t: performance.now() };
 let currentRipple = new THREE.Vector2(20, 20);
 let ripplePulse = 0;
@@ -504,16 +502,16 @@ function createFishingNet() {
   const gripMaterial = new THREE.MeshStandardMaterial({ color: 0x36a6a1, roughness: 0.55, metalness: 0.02 });
   const bandMaterial = new THREE.MeshStandardMaterial({ color: 0xff6f61, roughness: 0.48, metalness: 0.02 });
   const connectorMaterial = new THREE.MeshStandardMaterial({ color: 0xe9d4a0, roughness: 0.38, metalness: 0.08 });
-  const connectorStart = new THREE.Vector3(-0.48, 0.02, 0.42);
-  const connectorEnd = new THREE.Vector3(-0.88, -0.04, 0.78);
+  const connectorStart = new THREE.Vector3(0.48, 0.02, 0.42);
+  const connectorEnd = new THREE.Vector3(0.88, -0.04, 0.78);
   const poleStart = connectorEnd;
-  const poleEnd = new THREE.Vector3(-2.1, -0.14, 1.78);
+  const poleEnd = new THREE.Vector3(2.1, -0.14, 1.78);
 
   group.add(cylinderBetween(connectorStart, connectorEnd, 0.055, connectorMaterial));
   group.add(cylinderBetween(poleStart, poleEnd, 0.045, poleMaterial));
-  group.add(cylinderBetween(new THREE.Vector3(-2.08, -0.14, 1.76), new THREE.Vector3(-2.55, -0.18, 2.16), 0.07, gripMaterial));
-  group.add(cylinderBetween(new THREE.Vector3(-1.96, -0.13, 1.66), new THREE.Vector3(-2.05, -0.14, 1.74), 0.074, bandMaterial));
-  group.add(cylinderBetween(new THREE.Vector3(-2.38, -0.17, 2.05), new THREE.Vector3(-2.47, -0.18, 2.13), 0.076, bandMaterial));
+  group.add(cylinderBetween(new THREE.Vector3(2.08, -0.14, 1.76), new THREE.Vector3(2.55, -0.18, 2.16), 0.07, gripMaterial));
+  group.add(cylinderBetween(new THREE.Vector3(1.96, -0.13, 1.66), new THREE.Vector3(2.05, -0.14, 1.74), 0.074, bandMaterial));
+  group.add(cylinderBetween(new THREE.Vector3(2.38, -0.17, 2.05), new THREE.Vector3(2.47, -0.18, 2.13), 0.076, bandMaterial));
 
   const joint = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 10), connectorMaterial);
   joint.position.copy(connectorEnd);
@@ -606,12 +604,12 @@ function setNetTarget(point, force = false) {
 function updateScore() {
   scoreValue.textContent = String(caughtCount);
   scoreMarkers.innerHTML = "";
-  for (let i = 0; i < Math.min(caughtCount, 6); i += 1) {
+  for (let i = 0; i < Math.min(caughtCount, 30); i += 1) {
     const marker = document.createElement("span");
     marker.className = "score-marker";
     scoreMarkers.appendChild(marker);
   }
-  if (caughtCount > 5 && !successShown) {
+  if (caughtCount >= 30 && !successShown) {
     successShown = true;
     successBanner.hidden = false;
   }
@@ -904,7 +902,7 @@ async function startAudio() {
     await audio.context.resume();
     audio.enabled = true;
     rampGain(audio.master, 0.9, 0.2);
-    rampGain(audio.rainGain, rainHeavy ? 0.09 : 0.04, 0.35);
+    rampGain(audio.rainGain, 0.035 + rainLevel * 0.07, 0.35);
     rampGain(audio.musicGain, 0.16, 0.8);
     soundToggle.classList.add("is-active");
     return;
@@ -914,7 +912,7 @@ async function startAudio() {
   if (!AudioContext) return;
   audio.context = new AudioContext();
   audio.master = makeGain(audio.context, 0.0001);
-  audio.rainGain = makeGain(audio.context, rainHeavy ? 0.09 : 0.04);
+  audio.rainGain = makeGain(audio.context, 0.035 + rainLevel * 0.07);
   audio.musicGain = makeGain(audio.context, 0.0001);
   audio.fxGain = makeGain(audio.context, 0.42);
   audio.rainGain.connect(audio.master);
@@ -932,6 +930,7 @@ async function startAudio() {
 
 function stopAudio() {
   if (!audio.context) return;
+  audioWanted = false;
   audio.enabled = false;
   rampGain(audio.master, 0.0001, 0.25);
   soundToggle.classList.remove("is-active");
@@ -941,8 +940,14 @@ function toggleAudio() {
   if (audio.enabled) {
     stopAudio();
   } else {
+    audioWanted = true;
     startAudio();
   }
+}
+
+function unlockDefaultAudio() {
+  if (!audioWanted || audio.enabled) return;
+  startAudio();
 }
 
 function createRain() {
@@ -1041,6 +1046,7 @@ function triggerWave(point, strength = 1.2) {
 }
 
 function onPointerMove(event) {
+  event.preventDefault();
   const now = performance.now();
   const dt = Math.max(now - lastPointer.t, 16);
   const dx = event.clientX - lastPointer.x;
@@ -1054,124 +1060,36 @@ function onPointerMove(event) {
   lastPointer = { x: event.clientX, y: event.clientY, t: now };
 }
 
-renderer.domElement.addEventListener("pointermove", onPointerMove, { passive: true });
+renderer.domElement.addEventListener("pointermove", onPointerMove, { passive: false });
 renderer.domElement.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  unlockDefaultAudio();
   const point = screenToWater(event.clientX, event.clientY);
   setNetTarget(point);
   triggerWave(point, 1.35);
 });
 
-rainToggle.addEventListener("click", () => {
-  rainHeavy = !rainHeavy;
-  rainToggle.classList.toggle("is-active", rainHeavy);
-  if (audio.context && audio.enabled) {
-    rampGain(audio.rainGain, rainHeavy ? 0.09 : 0.04, 0.35);
-  }
-});
 rainToggle.classList.add("is-active");
+rainToggle.addEventListener("click", unlockDefaultAudio);
 
 soundToggle.addEventListener("click", toggleAudio);
+window.addEventListener("pointerdown", unlockDefaultAudio, { once: true, passive: true });
+window.addEventListener("keydown", unlockDefaultAudio, { once: true });
 
-let gestureStream = null;
-let gestureCanvas = null;
-let gestureContext = null;
-let previousFrame = null;
-let lastGestureTime = 0;
-let lastCentroidX = null;
-let motionEnergySmoothed = 0;
-
-async function toggleCameraGesture() {
-  if (cameraGestureActive) {
-    cameraGestureActive = false;
-    cameraToggle.classList.remove("is-active");
-    gestureVideo.classList.remove("is-visible");
-    if (gestureStream) {
-      for (const track of gestureStream.getTracks()) track.stop();
-    }
-    gestureStream = null;
-    return;
+function updateRainCycle(elapsed) {
+  const slow = (Math.sin(elapsed * 0.18) + 1) * 0.5;
+  const gust = Math.max(0, Math.sin(elapsed * 0.73 + 1.8)) * 0.18;
+  rainLevel = THREE.MathUtils.clamp(0.32 + slow * 0.5 + gust, 0.28, 1);
+  rainToggle.style.opacity = String(0.62 + rainLevel * 0.38);
+  if (audio.context && audio.enabled) {
+    rampGain(audio.rainGain, 0.025 + rainLevel * 0.075, 0.75);
   }
-
-  try {
-    gestureStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
-    gestureVideo.srcObject = gestureStream;
-    await gestureVideo.play();
-    gestureCanvas = document.createElement("canvas");
-    gestureCanvas.width = 72;
-    gestureCanvas.height = 54;
-    gestureContext = gestureCanvas.getContext("2d", { willReadFrequently: true });
-    previousFrame = null;
-    lastCentroidX = null;
-    cameraGestureActive = true;
-    cameraToggle.classList.add("is-active");
-    gestureVideo.classList.add("is-visible");
-  } catch {
-    cameraGestureActive = false;
-    cameraToggle.classList.remove("is-active");
-  }
-}
-
-cameraToggle.addEventListener("click", toggleCameraGesture);
-
-function updateCameraGesture() {
-  if (!cameraGestureActive || !gestureVideo.videoWidth || !gestureContext) return;
-  gestureContext.save();
-  gestureContext.scale(-1, 1);
-  gestureContext.drawImage(gestureVideo, -gestureCanvas.width, 0, gestureCanvas.width, gestureCanvas.height);
-  gestureContext.restore();
-  const frame = gestureContext.getImageData(0, 0, gestureCanvas.width, gestureCanvas.height);
-  if (!previousFrame) {
-    previousFrame = new Uint8ClampedArray(frame.data);
-    return;
-  }
-
-  let energy = 0;
-  let weightedX = 0;
-  for (let y = 0; y < gestureCanvas.height; y += 2) {
-    for (let x = 0; x < gestureCanvas.width; x += 2) {
-      const idx = (y * gestureCanvas.width + x) * 4;
-      const current = frame.data[idx] * 0.3 + frame.data[idx + 1] * 0.59 + frame.data[idx + 2] * 0.11;
-      const prev = previousFrame[idx] * 0.3 + previousFrame[idx + 1] * 0.59 + previousFrame[idx + 2] * 0.11;
-      const diff = Math.abs(current - prev);
-      if (diff > 16) {
-        energy += diff;
-        weightedX += x * diff;
-      }
-    }
-  }
-
-  previousFrame.set(frame.data);
-  motionEnergySmoothed = THREE.MathUtils.lerp(motionEnergySmoothed, energy, 0.28);
-  if (energy < 900 || motionEnergySmoothed < 5200) return;
-  const centroidX = weightedX / energy;
-  const cameraNetPoint = new THREE.Vector3(
-    THREE.MathUtils.mapLinear(centroidX, 0, gestureCanvas.width, -8.2, 8.2),
-    0,
-    THREE.MathUtils.mapLinear(Math.min(motionEnergySmoothed, 36000), 900, 36000, 2.8, -4.6)
-  );
-  setNetTarget(cameraNetPoint);
-  if (lastCentroidX === null) {
-    lastCentroidX = centroidX;
-    return;
-  }
-
-  const now = performance.now();
-  const move = centroidX - lastCentroidX;
-  const isSweep = Math.abs(move) > 4.5;
-  const isBigMotion = motionEnergySmoothed > 21000;
-  if ((isSweep || isBigMotion) && now - lastGestureTime > 520) {
-    const x = THREE.MathUtils.mapLinear(centroidX, 0, gestureCanvas.width, -5.5, 5.5);
-    const z = THREE.MathUtils.mapLinear(Math.min(motionEnergySmoothed, 36000), 5200, 36000, 1.8, -2.2);
-    triggerWave(new THREE.Vector3(x, 0, z), THREE.MathUtils.clamp(motionEnergySmoothed / 9000, 1.4, 3.4));
-    lastGestureTime = now;
-  }
-  lastCentroidX = THREE.MathUtils.lerp(lastCentroidX, centroidX, 0.35);
 }
 
 function updateRain(delta) {
   const positions = rain.geometry.attributes.position.array;
-  const factor = rainHeavy ? 1 : 0.42;
-  rain.material.opacity = rainHeavy ? 0.48 : 0.22;
+  const factor = 0.35 + rainLevel * 0.9;
+  rain.material.opacity = 0.18 + rainLevel * 0.34;
   for (let i = 0; i < rain.userData.count; i += 1) {
     const idx = i * 6;
     const drop = rain.userData.speeds[i] * factor * delta;
@@ -1197,7 +1115,7 @@ function updateRain(delta) {
 
 function updateRipples(delta) {
   for (const ring of ripples.children) {
-    ring.userData.life += delta * ring.userData.speed * (rainHeavy ? 1.0 : 0.55);
+    ring.userData.life += delta * ring.userData.speed * (0.5 + rainLevel * 0.7);
     if (ring.userData.life > 1) {
       ring.userData.life = 0;
       ring.position.x = (Math.random() - 0.5) * 18;
@@ -1206,7 +1124,7 @@ function updateRipples(delta) {
     }
     const s = 0.15 + ring.userData.life * ring.userData.max;
     ring.scale.setScalar(s);
-    ring.material.opacity = (1 - ring.userData.life) * (rainHeavy ? 0.22 : 0.12);
+    ring.material.opacity = (1 - ring.userData.life) * (0.09 + rainLevel * 0.17);
   }
 }
 
@@ -1230,6 +1148,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.033);
   const elapsed = clock.elapsedTime;
   waterUniforms.uTime.value = elapsed;
+  updateRainCycle(elapsed);
   ripplePulse = Math.min(ripplePulse + delta * 0.85, 1);
   waterUniforms.uPulse.value = ripplePulse;
 
@@ -1244,7 +1163,6 @@ function animate() {
   updateRain(delta);
   updateRipples(delta);
   updateMist(delta, elapsed);
-  updateCameraGesture();
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

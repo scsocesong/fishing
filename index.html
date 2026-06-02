@@ -13,22 +13,18 @@
   <body>
     <div id="app"></div>
     <div class="hud" aria-label="scene controls">
-      <button id="cameraToggle" class="icon-button" type="button" title="开启摄像头挥手">
-        <span aria-hidden="true">◉</span>
-      </button>
-      <button id="rainToggle" class="icon-button" type="button" title="切换雨势">
+      <button id="rainToggle" class="icon-button is-active" type="button" title="雨势自动变化">
         <span aria-hidden="true">☂</span>
       </button>
-      <button id="soundToggle" class="icon-button" type="button" title="开启音效">
+      <button id="soundToggle" class="icon-button is-active" type="button" title="声音已默认开启">
         <span aria-hidden="true">♫</span>
       </button>
     </div>
     <div class="score-panel" aria-live="polite">
-      <div class="score-count"><span id="scoreValue">0</span>/6</div>
+      <div class="score-count"><span id="scoreValue">0</span>/30</div>
       <div id="scoreMarkers" class="score-markers" aria-label="捕鱼分数"></div>
     </div>
     <div id="successBanner" class="success-banner" hidden>捕鱼成功</div>
-    <video id="gestureVideo" playsinline muted></video>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
