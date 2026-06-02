@@ -6,7 +6,6 @@ const rainToggle = document.querySelector("#rainToggle");
 const soundToggle = document.querySelector("#soundToggle");
 const scoreValue = document.querySelector("#scoreValue");
 const scoreMarkers = document.querySelector("#scoreMarkers");
-const scoopButton = document.querySelector("#scoopButton");
 const successBanner = document.querySelector("#successBanner");
 
 const scene = new THREE.Scene();
@@ -60,7 +59,6 @@ const bucketPosition = new THREE.Vector3(7.1, 0.32, 4.55);
 let netCarry = null;
 let heldFishVisual = null;
 let mobileMode = false;
-let mobileScoop = null;
 
 const audio = {
   context: null,
@@ -1083,37 +1081,6 @@ soundToggle.addEventListener("click", toggleAudio);
 window.addEventListener("pointerdown", unlockDefaultAudio, { once: true, passive: true });
 window.addEventListener("keydown", unlockDefaultAudio, { once: true });
 
-function startMobileScoop() {
-  unlockDefaultAudio();
-  if (netCarry) return;
-  const base = netTarget.clone();
-  mobileScoop = {
-    age: 0,
-    duration: 0.68,
-    start: new THREE.Vector3(base.x, 0, THREE.MathUtils.clamp(base.z + 0.92, -5.4, 5.6)),
-    end: new THREE.Vector3(base.x, 0, THREE.MathUtils.clamp(base.z - 1.22, -5.6, 5.4))
-  };
-  netActiveUntil = performance.now() + 1400;
-}
-
-function updateMobileScoop(delta) {
-  if (!mobileScoop) return;
-  mobileScoop.age += delta;
-  const t = Math.min(mobileScoop.age / mobileScoop.duration, 1);
-  const eased = t < 0.22 ? 0 : THREE.MathUtils.smoothstep(t, 0.22, 1);
-  const point = mobileScoop.start.clone().lerp(mobileScoop.end, eased);
-  setNetTarget(point, true);
-  netActiveUntil = performance.now() + 900;
-  if (t >= 1) {
-    mobileScoop = null;
-  }
-}
-
-scoopButton.addEventListener("pointerdown", (event) => {
-  event.preventDefault();
-  startMobileScoop();
-});
-
 function updateRainCycle(elapsed) {
   const slow = (Math.sin(elapsed * 0.18) + 1) * 0.5;
   const gust = Math.max(0, Math.sin(elapsed * 0.73 + 1.8)) * 0.18;
@@ -1180,7 +1147,7 @@ function resize() {
   if (mobileMode) {
     camera.position.set(0, 12.6, 14.8);
     camera.lookAt(0, 0, 0.15);
-    bucketPosition.set(4.8, 0.32, 3.95);
+    bucketPosition.set(0, 0.32, 5.25);
   } else {
     camera.position.set(0, 9.2, 11.2);
     camera.lookAt(0, 0, 0);
@@ -1203,7 +1170,6 @@ function animate() {
   waterUniforms.uPulse.value = ripplePulse;
 
   for (const one of fish) one.update(delta, elapsed);
-  updateMobileScoop(delta);
   updateFishingNet(delta, elapsed);
   updateFlopEffects(delta);
   for (const [index, flower] of flowers.entries()) {
