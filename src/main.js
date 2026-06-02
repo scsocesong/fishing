@@ -6,6 +6,7 @@ const rainToggle = document.querySelector("#rainToggle");
 const soundToggle = document.querySelector("#soundToggle");
 const scoreValue = document.querySelector("#scoreValue");
 const scoreMarkers = document.querySelector("#scoreMarkers");
+const scoopButton = document.querySelector("#scoopButton");
 const successBanner = document.querySelector("#successBanner");
 
 const scene = new THREE.Scene();
@@ -58,6 +59,8 @@ const flopEffects = [];
 const bucketPosition = new THREE.Vector3(7.1, 0.32, 4.55);
 let netCarry = null;
 let heldFishVisual = null;
+let mobileMode = false;
+let mobileScoop = null;
 
 const audio = {
   context: null,
@@ -593,10 +596,12 @@ heldFishVisual = createHeldFishVisual();
 
 function setNetTarget(point, force = false) {
   if (netCarry && !force) return;
+  const xLimit = mobileMode ? 6.4 : 9.2;
+  const zLimit = mobileMode ? 5.6 : 7.2;
   netTarget.set(
-    THREE.MathUtils.clamp(point.x, -9.2, 9.2),
+    THREE.MathUtils.clamp(point.x, -xLimit, xLimit),
     0.36,
-    THREE.MathUtils.clamp(point.z, -7.2, 7.2)
+    THREE.MathUtils.clamp(point.z, -zLimit, zLimit)
   );
   netActiveUntil = performance.now() + 900;
 }
@@ -1054,7 +1059,7 @@ function onPointerMove(event) {
   const speed = Math.sqrt(dx * dx + dy * dy) / dt;
   const point = screenToWater(event.clientX, event.clientY);
   setNetTarget(point);
-  if (speed > 1.15) {
+  if (!mobileMode && speed > 1.15) {
     triggerWave(point, THREE.MathUtils.clamp(speed * 0.65, 1.1, 3.2));
   }
   lastPointer = { x: event.clientX, y: event.clientY, t: now };
@@ -1066,7 +1071,9 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
   unlockDefaultAudio();
   const point = screenToWater(event.clientX, event.clientY);
   setNetTarget(point);
-  triggerWave(point, 1.35);
+  if (!mobileMode) {
+    triggerWave(point, 1.35);
+  }
 });
 
 rainToggle.classList.add("is-active");
@@ -1075,6 +1082,37 @@ rainToggle.addEventListener("click", unlockDefaultAudio);
 soundToggle.addEventListener("click", toggleAudio);
 window.addEventListener("pointerdown", unlockDefaultAudio, { once: true, passive: true });
 window.addEventListener("keydown", unlockDefaultAudio, { once: true });
+
+function startMobileScoop() {
+  unlockDefaultAudio();
+  if (netCarry) return;
+  const base = netTarget.clone();
+  mobileScoop = {
+    age: 0,
+    duration: 0.68,
+    start: new THREE.Vector3(base.x, 0, THREE.MathUtils.clamp(base.z + 0.92, -5.4, 5.6)),
+    end: new THREE.Vector3(base.x, 0, THREE.MathUtils.clamp(base.z - 1.22, -5.6, 5.4))
+  };
+  netActiveUntil = performance.now() + 1400;
+}
+
+function updateMobileScoop(delta) {
+  if (!mobileScoop) return;
+  mobileScoop.age += delta;
+  const t = Math.min(mobileScoop.age / mobileScoop.duration, 1);
+  const eased = t < 0.22 ? 0 : THREE.MathUtils.smoothstep(t, 0.22, 1);
+  const point = mobileScoop.start.clone().lerp(mobileScoop.end, eased);
+  setNetTarget(point, true);
+  netActiveUntil = performance.now() + 900;
+  if (t >= 1) {
+    mobileScoop = null;
+  }
+}
+
+scoopButton.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  startMobileScoop();
+});
 
 function updateRainCycle(elapsed) {
   const slow = (Math.sin(elapsed * 0.18) + 1) * 0.5;
@@ -1137,12 +1175,24 @@ function updateMist(delta, elapsed) {
 }
 
 function resize() {
+  mobileMode = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
   camera.aspect = window.innerWidth / window.innerHeight;
+  if (mobileMode) {
+    camera.position.set(0, 12.6, 14.8);
+    camera.lookAt(0, 0, 0.15);
+    bucketPosition.set(4.8, 0.32, 3.95);
+  } else {
+    camera.position.set(0, 9.2, 11.2);
+    camera.lookAt(0, 0, 0);
+    bucketPosition.set(7.1, 0.32, 4.55);
+  }
+  bucket.position.copy(bucketPosition);
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 window.addEventListener("resize", resize);
+resize();
 
 function animate() {
   const delta = Math.min(clock.getDelta(), 0.033);
@@ -1153,6 +1203,7 @@ function animate() {
   waterUniforms.uPulse.value = ripplePulse;
 
   for (const one of fish) one.update(delta, elapsed);
+  updateMobileScoop(delta);
   updateFishingNet(delta, elapsed);
   updateFlopEffects(delta);
   for (const [index, flower] of flowers.entries()) {
