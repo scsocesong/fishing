@@ -749,6 +749,10 @@ function catchFish(one) {
 }
 
 function updateFishingNet(delta, elapsed) {
+  if (mobileMode && !netCarry && performance.now() >= netActiveUntil) {
+    setNetTarget(new THREE.Vector3(bucketPosition.x - 0.75, 0, bucketPosition.z - 0.25), true);
+  }
+
   previousNetPosition.copy(netPosition);
   netPosition.lerp(netTarget, 1 - Math.exp(-delta * 12));
   netVelocity.copy(netPosition).sub(previousNetPosition);
@@ -757,7 +761,7 @@ function updateFishingNet(delta, elapsed) {
   fishingNet.rotation.z = Math.sin(elapsed * 3.6) * 0.04;
 
   const active = performance.now() < netActiveUntil;
-  fishingNet.visible = active || caughtCount === 0;
+  fishingNet.visible = mobileMode || active || caughtCount === 0;
   if (!active) return;
 
   if (netCarry) {
