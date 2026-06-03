@@ -128,6 +128,35 @@ canvas {
   backdrop-filter: blur(14px);
 }
 
+.creator-badge {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 10;
+  height: 38px;
+  padding: 0 12px 0 10px;
+  border: 1px solid rgb(232 225 190 / 0.24);
+  border-radius: 8px;
+  background: rgb(8 25 25 / 0.54);
+  color: #e7f7d5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 2px 10px rgb(0 0 0 / 0.4);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.22);
+  backdrop-filter: blur(10px);
+  user-select: none;
+}
+
+.wechat-icon {
+  width: 23px;
+  height: 23px;
+  fill: #67d36f;
+  filter: drop-shadow(0 2px 6px rgb(0 0 0 / 0.24));
+}
+
 @keyframes marker-pop {
   from {
     opacity: 0;
@@ -172,4 +201,16 @@ canvas {
     height: 10px;
   }
 
+  .creator-badge {
+    left: 14px;
+    bottom: 12px;
+    height: 34px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .wechat-icon {
+    width: 20px;
+    height: 20px;
+  }
 }
