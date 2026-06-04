@@ -12,6 +12,11 @@
   </head>
   <body>
     <div id="app"></div>
+    <section class="intro-panel" aria-label="game introduction">
+      <h1>雨天荷塘捞金鱼</h1>
+      <p>Catch goldfish in a rainy lotus pond.</p>
+      <p class="intro-note">通关后分享给朋友 / Share your win with friends</p>
+    </section>
     <div class="hud" aria-label="scene controls">
       <button id="rainToggle" class="icon-button is-active" type="button" title="雨势自动变化">
         <span aria-hidden="true">☂</span>
@@ -37,7 +42,17 @@
       </svg>
       <span>GitHub · scsoce</span>
     </a>
-    <div id="successBanner" class="success-banner" hidden>捕鱼成功</div>
+    <aside class="contact-panel" aria-label="custom game contact">
+      <strong>定制互动小游戏</strong>
+      <span>Custom web games</span>
+      <span>WeChat ID: scsoce</span>
+    </aside>
+    <div id="successBanner" class="success-banner" hidden>
+      <strong>捕鱼成功</strong>
+      <span>Goldfish catch complete</span>
+      <small>喜欢就分享给朋友 / Share this rainy pond with friends</small>
+      <small>定制互动网页: WeChat scsoce / Custom games: WeChat scsoce</small>
+    </div>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
