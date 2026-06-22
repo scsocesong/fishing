@@ -45,7 +45,11 @@ let rainLevel = 1;
 let audioWanted = true;
 let lastPointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, t: performance.now() };
 let currentRipple = new THREE.Vector2(20, 20);
+const fishRipple = new THREE.Vector2(20, 20);
+const netRipple = new THREE.Vector2(20, 20);
 let ripplePulse = 0;
+let fishRippleStrength = 0;
+let netRippleStrength = 0;
 let lastSplashAt = 0;
 let caughtCount = 0;
 let successShown = false;
@@ -89,6 +93,11 @@ const waterUniforms = {
   uTime: { value: 0 },
   uRipple: { value: currentRipple },
   uPulse: { value: 0 },
+  uFishRipple: { value: fishRipple },
+  uFishStrength: { value: 0 },
+  uNetRipple: { value: netRipple },
+  uNetStrength: { value: 0 },
+  uRainLevel: { value: rainLevel },
   uDeep: { value: palette.waterDeep },
   uMid: { value: palette.waterMid },
   uGlow: { value: palette.waterGlow }
@@ -100,16 +109,31 @@ const water = new THREE.Mesh(
     uniforms: waterUniforms,
     vertexShader: `
       uniform float uTime;
+      uniform vec2 uFishRipple;
+      uniform vec2 uNetRipple;
+      uniform float uFishStrength;
+      uniform float uNetStrength;
       varying vec2 vUv;
       varying float vWave;
+      varying float vDisturbance;
+
+      float pulse(vec2 p, vec2 c, float scale, float speed) {
+        float d = distance(p, c);
+        float wave = sin(d * scale - uTime * speed) * 0.5 + 0.5;
+        return wave * smoothstep(0.22, 0.0, d);
+      }
 
       void main() {
         vUv = uv;
         vec3 pos = position;
         float waveA = sin((pos.x * 1.4 + uTime * 0.65) + cos(pos.y * 1.2)) * 0.035;
         float waveB = sin((pos.y * 2.2 - uTime * 0.8) + pos.x * 0.45) * 0.025;
-        pos.z += waveA + waveB;
-        vWave = waveA + waveB;
+        float fine = sin(pos.x * 5.4 + uTime * 1.8) * sin(pos.y * 4.1 - uTime * 1.35) * 0.012;
+        float fishWake = pulse(uv, uFishRipple, 62.0, 5.2) * uFishStrength * 0.035;
+        float netWake = pulse(uv, uNetRipple, 48.0, 4.1) * uNetStrength * 0.05;
+        pos.z += waveA + waveB + fine + fishWake + netWake;
+        vWave = waveA + waveB + fine;
+        vDisturbance = fishWake + netWake;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
     `,
@@ -117,25 +141,41 @@ const water = new THREE.Mesh(
       uniform float uTime;
       uniform vec2 uRipple;
       uniform float uPulse;
+      uniform vec2 uFishRipple;
+      uniform vec2 uNetRipple;
+      uniform float uFishStrength;
+      uniform float uNetStrength;
+      uniform float uRainLevel;
       uniform vec3 uDeep;
       uniform vec3 uMid;
       uniform vec3 uGlow;
       varying vec2 vUv;
       varying float vWave;
+      varying float vDisturbance;
 
       float ring(vec2 p, vec2 c, float r, float width) {
         float d = distance(p, c);
         return smoothstep(width, 0.0, abs(d - r));
       }
 
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
       void main() {
         vec2 p = vUv;
         float shade = smoothstep(0.0, 1.0, p.y) * 0.65 + smoothstep(0.0, 1.0, p.x) * 0.22;
         float threads = sin((p.x * 42.0 + p.y * 26.0) + uTime * 0.65) * 0.025;
+        float silk = sin(p.x * 92.0 + uTime * 1.7) * sin(p.y * 67.0 - uTime * 1.15) * 0.018;
+        float micro = hash(floor((p + uTime * 0.012) * 95.0)) * 0.018 * uRainLevel;
         float rain = ring(p, uRipple, 0.05 + uPulse * 0.34, 0.015) * (1.0 - uPulse);
-        vec3 color = mix(uDeep, uMid, shade + threads + vWave);
-        color = mix(color, uGlow, rain * 0.55);
+        float fishWake = ring(p, uFishRipple, 0.075, 0.028) * uFishStrength;
+        float netWake = ring(p, uNetRipple, 0.11, 0.04) * uNetStrength;
+        float glint = pow(max(0.0, sin((p.x + p.y) * 38.0 + uTime * 2.2)), 5.0) * 0.06;
+        vec3 color = mix(uDeep, uMid, shade + threads + silk + micro + vWave);
+        color = mix(color, uGlow, rain * 0.58 + fishWake * 0.26 + netWake * 0.34 + vDisturbance * 3.2);
         color += vec3(0.015, 0.035, 0.03) * sin(uTime + p.y * 18.0);
+        color += vec3(0.12, 0.16, 0.11) * glint * (0.45 + uRainLevel * 0.55);
         gl_FragColor = vec4(color, 1.0);
       }
     `
@@ -1052,6 +1092,45 @@ function triggerWave(point, strength = 1.2) {
   for (const one of fish) one.fleeFrom(point, strength);
 }
 
+function waterUvFromWorld(point, target) {
+  target.set(
+    THREE.MathUtils.clamp((point.x + 14) / 28, 0, 1),
+    THREE.MathUtils.clamp(1 - (point.z + 11) / 22, 0, 1)
+  );
+}
+
+function updateWaterDisturbance(delta) {
+  let strongestFish = null;
+  let strongestSpeed = 0;
+  for (const one of fish) {
+    if (!one.group.visible || one.caughtCooldown > 0) continue;
+    const speed = one.velocity.length();
+    if (speed > strongestSpeed) {
+      strongestSpeed = speed;
+      strongestFish = one;
+    }
+  }
+
+  if (strongestFish) {
+    waterUvFromWorld(strongestFish.position, fishRipple);
+    const targetStrength = THREE.MathUtils.clamp(strongestSpeed * 0.32, 0.05, 0.55);
+    fishRippleStrength = THREE.MathUtils.lerp(fishRippleStrength, targetStrength, 1 - Math.exp(-delta * 4.6));
+  } else {
+    fishRippleStrength = THREE.MathUtils.lerp(fishRippleStrength, 0, 1 - Math.exp(-delta * 3));
+  }
+
+  waterUvFromWorld(netPosition, netRipple);
+  const netSpeed = netVelocity.length() / Math.max(delta, 0.001);
+  const targetNetStrength = performance.now() < netActiveUntil
+    ? THREE.MathUtils.clamp(netSpeed * 0.045 + (netCarry ? 0.22 : 0), 0, 0.78)
+    : 0;
+  netRippleStrength = THREE.MathUtils.lerp(netRippleStrength, targetNetStrength, 1 - Math.exp(-delta * 6));
+
+  waterUniforms.uFishStrength.value = fishRippleStrength;
+  waterUniforms.uNetStrength.value = netRippleStrength;
+  waterUniforms.uRainLevel.value = rainLevel;
+}
+
 function onPointerMove(event) {
   event.preventDefault();
   const now = performance.now();
@@ -1175,6 +1254,7 @@ function animate() {
 
   for (const one of fish) one.update(delta, elapsed);
   updateFishingNet(delta, elapsed);
+  updateWaterDisturbance(delta);
   updateFlopEffects(delta);
   for (const [index, flower] of flowers.entries()) {
     flower.rotation.y += delta * (0.05 + index * 0.01);
